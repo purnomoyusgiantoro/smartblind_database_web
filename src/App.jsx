@@ -35,6 +35,7 @@ function App() {
   const [queryError, setQueryError] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('Checking...');
   const [stats, setStats] = useState({ logsCount: 0, aiCount: 0 });
+  const [selectedRow, setSelectedRow] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -105,6 +106,7 @@ function App() {
     setLoading(true);
     setQueryError('');
     setData([]); // Clear old data to prevent crash during transition
+    setSelectedRow(null);
     try {
       const { data: result, error } = await supabase
         .from(table)
@@ -264,37 +266,45 @@ function App() {
                       <th style={{ width: '15%' }}>Waktu</th>
                       <th style={{ width: '10%' }}>Model</th>
                       <th style={{ width: '10%' }}>Mode</th>
-                      <th style={{ width: '30%' }}>Prompt</th>
-                      <th style={{ width: '35%' }}>Response</th>
+                      <th style={{ width: '10%' }}>User ID</th>
+                      <th style={{ width: '15%' }}>Location</th>
+                      <th style={{ width: '20%' }}>Prompt</th>
+                      <th style={{ width: '20%' }}>Response</th>
                     </tr>
                   ) : (
                     <tr>
                       <th style={{ width: '15%' }}>Waktu</th>
                       <th style={{ width: '10%' }}>Level</th>
-                      <th style={{ width: '15%' }}>Tag</th>
-                      <th style={{ width: '30%' }}>Message</th>
-                      <th style={{ width: '30%' }}>Error Details</th>
+                      <th style={{ width: '10%' }}>Tag</th>
+                      <th style={{ width: '10%' }}>User ID</th>
+                      <th style={{ width: '15%' }}>Location</th>
+                      <th style={{ width: '20%' }}>Message</th>
+                      <th style={{ width: '20%' }}>Error Details</th>
                     </tr>
                   )}
                 </thead>
                 <tbody>
                   {data.map((row) => (
-                    <tr key={row.id}>
+                    <tr key={row.id} className="clickable-row" onClick={() => setSelectedRow(row)}>
                       {activeTab === 'ai_histories' ? (
                         <>
                           <td style={{ fontSize: '0.875rem', color: '#64748b' }}>{formatDate(row.created_at)}</td>
                           <td><span className="badge" style={{ backgroundColor: '#f1f5f9' }}>{row.model}</span></td>
                           <td>{row.mode}</td>
-                          <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.prompt}>{row.prompt}</td>
-                          <td style={{ maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.response}>{row.response}</td>
+                          <td style={{ maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.user_id}>{row.user_id || '-'}</td>
+                          <td style={{ maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.location}>{row.location || '-'}</td>
+                          <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.prompt}>{row.prompt}</td>
+                          <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.response}>{row.response}</td>
                         </>
                       ) : (
                         <>
                           <td style={{ fontSize: '0.875rem', color: '#64748b' }}>{formatDate(row.created_at)}</td>
                           <td>{getLevelBadge(row.level)}</td>
                           <td style={{ fontWeight: '500' }}>{row.tag}</td>
-                          <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.message}>{row.message}</td>
-                          <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#ef4444' }} title={row.error_details}>{row.error_details || '-'}</td>
+                          <td style={{ maxWidth: '100px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.user_id}>{row.user_id || '-'}</td>
+                          <td style={{ maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.location}>{row.location || '-'}</td>
+                          <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.message}>{row.message}</td>
+                          <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#ef4444' }} title={row.error_details}>{row.error_details || '-'}</td>
                         </>
                       )}
                     </tr>
@@ -387,6 +397,80 @@ function App() {
           {renderContent()}
         </div>
       </main>
+
+      {/* Modal */}
+      {selectedRow && (
+        <div className="modal-overlay" onClick={() => setSelectedRow(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {activeTab === 'ai_histories' ? 'Detail AI History' : 'Detail App Log'}
+              </h3>
+              <button className="modal-close-btn" onClick={() => setSelectedRow(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-field">
+                <span className="modal-field-label">ID</span>
+                <div className="modal-field-value">{selectedRow.id}</div>
+              </div>
+              <div className="modal-field">
+                <span className="modal-field-label">Waktu</span>
+                <div className="modal-field-value">{formatDate(selectedRow.created_at)}</div>
+              </div>
+              <div className="modal-field">
+                <span className="modal-field-label">User ID</span>
+                <div className="modal-field-value">{selectedRow.user_id || '-'}</div>
+              </div>
+              <div className="modal-field">
+                <span className="modal-field-label">Location</span>
+                <div className="modal-field-value">{selectedRow.location || '-'}</div>
+              </div>
+              
+              {activeTab === 'ai_histories' ? (
+                <>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Model</span>
+                    <div className="modal-field-value">{selectedRow.model}</div>
+                  </div>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Mode</span>
+                    <div className="modal-field-value">{selectedRow.mode}</div>
+                  </div>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Prompt</span>
+                    <div className="modal-field-value">{selectedRow.prompt}</div>
+                  </div>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Response</span>
+                    <div className="modal-field-value">{selectedRow.response}</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Level</span>
+                    <div className="modal-field-value">{selectedRow.level}</div>
+                  </div>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Tag</span>
+                    <div className="modal-field-value">{selectedRow.tag}</div>
+                  </div>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Message</span>
+                    <div className="modal-field-value">{selectedRow.message}</div>
+                  </div>
+                  <div className="modal-field">
+                    <span className="modal-field-label">Error Details</span>
+                    <div className="modal-field-value">{selectedRow.error_details || '-'}</div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
