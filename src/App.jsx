@@ -12,7 +12,9 @@ import {
   Activity,
   RefreshCw,
   Search,
-  AlertCircle
+  AlertCircle,
+  Menu,
+  X
 } from 'lucide-react';
 
 function App() {
@@ -27,6 +29,7 @@ function App() {
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('activeTab') || 'overview';
   }); 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [queryError, setQueryError] = useState('');
@@ -314,23 +317,33 @@ function App() {
 
   return (
     <div className="dashboard-layout">
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div className="mobile-overlay" onClick={() => setIsMobileMenuOpen(false)}></div>
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <Database size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.5rem' }} />
-          Smart Blind DB
+      <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
+        <div className="sidebar-brand" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <Database size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.5rem' }} />
+            Smart Blind DB
+          </div>
+          <button className="mobile-close-btn" onClick={() => setIsMobileMenuOpen(false)}>
+            <X size={24} />
+          </button>
         </div>
         
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <a href="#" className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('overview'); localStorage.setItem('activeTab', 'overview'); }}>
+          <a href="#" className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('overview'); localStorage.setItem('activeTab', 'overview'); setIsMobileMenuOpen(false); }}>
             <LayoutDashboard size={20} />
             Overview
           </a>
-          <a href="#" className={`nav-item ${activeTab === 'ai_histories' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('ai_histories'); localStorage.setItem('activeTab', 'ai_histories'); }}>
+          <a href="#" className={`nav-item ${activeTab === 'ai_histories' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('ai_histories'); localStorage.setItem('activeTab', 'ai_histories'); setIsMobileMenuOpen(false); }}>
             <MessageSquare size={20} />
             AI Histories
           </a>
-          <a href="#" className={`nav-item ${activeTab === 'app_logs' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('app_logs'); localStorage.setItem('activeTab', 'app_logs'); }}>
+          <a href="#" className={`nav-item ${activeTab === 'app_logs' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('app_logs'); localStorage.setItem('activeTab', 'app_logs'); setIsMobileMenuOpen(false); }}>
             <AlertTriangle size={20} />
             App Logs
           </a>
@@ -347,10 +360,15 @@ function App() {
       {/* Main Content */}
       <main className="main-content">
         <header className="top-header">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '500' }}>
-            {activeTab === 'overview' ? 'Dashboard Overview' : 
-             activeTab === 'ai_histories' ? 'AI Interaction History' : 'Application Logs'}
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu size={24} />
+            </button>
+            <h2 className="header-title" style={{ fontSize: '1.25rem', fontWeight: '500' }}>
+              {activeTab === 'overview' ? 'Dashboard Overview' : 
+               activeTab === 'ai_histories' ? 'AI Interaction History' : 'Application Logs'}
+            </h2>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <span className={`badge ${connectionStatus.includes('Connected') ? 'badge-success' : 'badge-warning'}`}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: connectionStatus.includes('Connected') ? '#22c55e' : '#eab308', marginRight: '0.5rem' }}></div>
