@@ -5,6 +5,8 @@ import {
   Lock, 
   User, 
   LayoutDashboard, 
+  MessageSquare,
+  AlertTriangle,
   Settings, 
   LogOut, 
   Activity,
@@ -14,76 +16,125 @@ import {
 } from 'lucide-react';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('auth') === 'true';
+  });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
   // Dashboard State
-  const [tableName, setTableName] = useState('');
-  const [tableData, setTableData] = useState([]);
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('activeTab') || 'overview';
+  }); 
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [queryError, setQueryError] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('Checking...');
+  const [stats, setStats] = useState({ logsCount: 0, aiCount: 0 });
 
   useEffect(() => {
     if (isAuthenticated) {
       checkConnection();
+      fetchStats();
+      if (activeTab !== 'overview') {
+        fetchTableData(activeTab);
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, activeTab]);
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin') {
+    const envUser = import.meta.env.VITE_ADMIN_USERNAME || 'admin';
+    const envPass = import.meta.env.VITE_ADMIN_PASSWORD || 'admin';
+    
+    if (username === envUser && password === envPass) {
       setIsAuthenticated(true);
+      localStorage.setItem('auth', 'true');
       setLoginError('');
+      setActiveTab('ai_histories');
+      localStorage.setItem('activeTab', 'ai_histories');
     } else {
-      setLoginError('Invalid username or password');
+      setLoginError('Kredensial tidak valid');
     }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    localStorage.removeItem('auth');
     setUsername('');
     setPassword('');
-    setTableData([]);
-    setTableName('');
+    setData([]);
+    setActiveTab('overview');
+    localStorage.setItem('activeTab', 'overview');
     setQueryError('');
   };
 
   const checkConnection = async () => {
     try {
-      // Just a simple ping to see if url is reachable by checking an arbitrary table limit 0
-      const { error } = await supabase.from('_dummy_table_check').select('*').limit(1);
-      // If it's a valid Supabase url, it will return a PostgREST error (PGRST116 or 42P01 relation does not exist)
-      // which is fine, it means we reached the API.
-      setConnectionStatus('Connected');
+      const { error } = await supabase.from('app_logs').select('id').limit(1);
+      if (error && error.code !== 'PGRST116') {
+        setConnectionStatus('Connected (with errors)');
+      } else {
+        setConnectionStatus('Connected');
+      }
     } catch (err) {
       setConnectionStatus('Disconnected');
     }
   };
 
-  const fetchTableData = async () => {
-    if (!tableName.trim()) {
-      setQueryError('Please enter a table name');
-      return;
+  const fetchStats = async () => {
+    try {
+      const [{ count: logsCount }, { count: aiCount }] = await Promise.all([
+        supabase.from('app_logs').select('*', { count: 'exact', head: true }),
+        supabase.from('ai_histories').select('*', { count: 'exact', head: true })
+      ]);
+      setStats({ 
+        logsCount: logsCount || 0, 
+        aiCount: aiCount || 0 
+      });
+    } catch (err) {
+      console.error("Error fetching stats:", err);
     }
+  };
+
+  const fetchTableData = async (table) => {
     setLoading(true);
     setQueryError('');
+    setData([]); // Clear old data to prevent crash during transition
     try {
-      const { data, error } = await supabase
-        .from(tableName.trim())
+      const { data: result, error } = await supabase
+        .from(table)
         .select('*')
+        .order('created_at', { ascending: false })
         .limit(50);
         
       if (error) throw error;
-      setTableData(data || []);
+      setData(result || []);
     } catch (err) {
       setQueryError(err.message || 'Error fetching data');
-      setTableData([]);
+      setData([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('id-ID', {
+      dateStyle: 'medium',
+      timeStyle: 'medium'
+    }).format(date);
+  };
+
+  const getLevelBadge = (level) => {
+    if (!level) return <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>-</span>;
+    const l = String(level).toLowerCase();
+    if (l === 'error' || l === 'fatal') return <span className="badge badge-error" style={{ backgroundColor: '#fee2e2', color: '#991b1b' }}>{level}</span>;
+    if (l === 'warning' || l === 'warn') return <span className="badge badge-warning" style={{ backgroundColor: '#fef9c3', color: '#854d0e' }}>{level}</span>;
+    if (l === 'info') return <span className="badge badge-info" style={{ backgroundColor: '#e0f2fe', color: '#075985' }}>{level}</span>;
+    return <span className="badge" style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>{level}</span>;
   };
 
   if (!isAuthenticated) {
@@ -96,8 +147,8 @@ function App() {
                 <Database size={32} />
               </div>
             </div>
-            <h1>Database Monitor</h1>
-            <p>Sign in to access your Supabase dashboard</p>
+            <h1>Smart Blind Monitor</h1>
+            <p>Masuk menggunakan kredensial admin</p>
           </div>
           
           <form onSubmit={handleLogin}>
@@ -111,7 +162,7 @@ function App() {
                   type="text" 
                   className="form-input" 
                   style={{ paddingLeft: '2.75rem' }}
-                  placeholder="Enter username"
+                  placeholder="Masukkan username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
@@ -127,7 +178,7 @@ function App() {
                   type="password" 
                   className="form-input" 
                   style={{ paddingLeft: '2.75rem' }}
-                  placeholder="Enter password"
+                  placeholder="Masukkan password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -136,7 +187,7 @@ function App() {
             </div>
             
             <button type="submit" className="btn btn-primary">
-              Sign In
+              Masuk
             </button>
           </form>
         </div>
@@ -144,34 +195,151 @@ function App() {
     );
   }
 
+  const renderContent = () => {
+    if (activeTab === 'overview') {
+      return (
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
+              <Activity size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>Status API</h3>
+              <div className="value">{connectionStatus}</div>
+            </div>
+          </div>
+          <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('ai_histories')}>
+            <div className="stat-icon" style={{ backgroundColor: '#eff6ff', color: '#3b82f6' }}>
+              <MessageSquare size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>Total AI Histories</h3>
+              <div className="value">{stats.aiCount}</div>
+            </div>
+          </div>
+          <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('app_logs')}>
+            <div className="stat-icon" style={{ backgroundColor: '#fef2f2', color: '#ef4444' }}>
+              <AlertTriangle size={24} />
+            </div>
+            <div className="stat-content">
+              <h3>Total App Logs</h3>
+              <div className="value">{stats.logsCount}</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">
+            {activeTab === 'ai_histories' ? 'AI Histories (Riwayat Interaksi AI)' : 'App Logs (Log Aplikasi)'}
+          </h3>
+          <button className="btn btn-primary" onClick={() => fetchTableData(activeTab)} style={{ padding: '0.5rem 1rem' }} disabled={loading}>
+            {loading ? <RefreshCw size={18} className="spin-animation" /> : <RefreshCw size={18} />}
+            <span style={{ marginLeft: '0.5rem' }}>Refresh</span>
+          </button>
+        </div>
+        
+        <div style={{ padding: '1rem' }}>
+          {queryError && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', backgroundColor: '#fef2f2', padding: '0.75rem', borderRadius: '8px', fontSize: '0.875rem' }}>
+              <AlertCircle size={18} />
+              {queryError}
+            </div>
+          )}
+
+          {loading && data.length === 0 ? (
+            <div className="loader"></div>
+          ) : data.length > 0 ? (
+            <div className="table-responsive" style={{ marginTop: '1rem' }}>
+              <table className="table">
+                <thead>
+                  {activeTab === 'ai_histories' ? (
+                    <tr>
+                      <th style={{ width: '15%' }}>Waktu</th>
+                      <th style={{ width: '10%' }}>Model</th>
+                      <th style={{ width: '10%' }}>Mode</th>
+                      <th style={{ width: '30%' }}>Prompt</th>
+                      <th style={{ width: '35%' }}>Response</th>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <th style={{ width: '15%' }}>Waktu</th>
+                      <th style={{ width: '10%' }}>Level</th>
+                      <th style={{ width: '15%' }}>Tag</th>
+                      <th style={{ width: '30%' }}>Message</th>
+                      <th style={{ width: '30%' }}>Error Details</th>
+                    </tr>
+                  )}
+                </thead>
+                <tbody>
+                  {data.map((row) => (
+                    <tr key={row.id}>
+                      {activeTab === 'ai_histories' ? (
+                        <>
+                          <td style={{ fontSize: '0.875rem', color: '#64748b' }}>{formatDate(row.created_at)}</td>
+                          <td><span className="badge" style={{ backgroundColor: '#f1f5f9' }}>{row.model}</span></td>
+                          <td>{row.mode}</td>
+                          <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.prompt}>{row.prompt}</td>
+                          <td style={{ maxWidth: '350px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.response}>{row.response}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td style={{ fontSize: '0.875rem', color: '#64748b' }}>{formatDate(row.created_at)}</td>
+                          <td>{getLevelBadge(row.level)}</td>
+                          <td style={{ fontWeight: '500' }}>{row.tag}</td>
+                          <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={row.message}>{row.message}</td>
+                          <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#ef4444' }} title={row.error_details}>{row.error_details || '-'}</td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            !queryError && (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+                <Database size={48} style={{ margin: '0 auto 1rem auto', opacity: 0.2 }} />
+                <p>Belum ada data untuk {activeTab === 'ai_histories' ? 'AI Histories' : 'App Logs'}.</p>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard-layout">
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-brand">
           <Database size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.5rem' }} />
-          Data Monitor
+          Smart Blind DB
         </div>
         
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <a href="#" className="nav-item active">
+          <a href="#" className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('overview'); localStorage.setItem('activeTab', 'overview'); }}>
             <LayoutDashboard size={20} />
             Overview
           </a>
-          <a href="#" className="nav-item">
-            <Activity size={20} />
-            Activity Log
+          <a href="#" className={`nav-item ${activeTab === 'ai_histories' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('ai_histories'); localStorage.setItem('activeTab', 'ai_histories'); }}>
+            <MessageSquare size={20} />
+            AI Histories
           </a>
-          <a href="#" className="nav-item">
-            <Settings size={20} />
-            Settings
+          <a href="#" className={`nav-item ${activeTab === 'app_logs' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setActiveTab('app_logs'); localStorage.setItem('activeTab', 'app_logs'); }}>
+            <AlertTriangle size={20} />
+            App Logs
           </a>
         </nav>
         
         <div className="sidebar-footer">
           <button onClick={handleLogout} className="nav-item" style={{ width: '100%', background: 'transparent', border: 'none', textAlign: 'left', marginTop: 'auto' }}>
             <LogOut size={20} />
-            Logout
+            Keluar
           </button>
         </div>
       </aside>
@@ -179,11 +347,14 @@ function App() {
       {/* Main Content */}
       <main className="main-content">
         <header className="top-header">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '500' }}>Dashboard Overview</h2>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: '500' }}>
+            {activeTab === 'overview' ? 'Dashboard Overview' : 
+             activeTab === 'ai_histories' ? 'AI Interaction History' : 'Application Logs'}
+          </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span className={`badge ${connectionStatus === 'Connected' ? 'badge-success' : 'badge-warning'}`}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: connectionStatus === 'Connected' ? '#22c55e' : '#eab308', marginRight: '0.5rem' }}></div>
-              API {connectionStatus}
+            <span className={`badge ${connectionStatus.includes('Connected') ? 'badge-success' : 'badge-warning'}`}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: connectionStatus.includes('Connected') ? '#22c55e' : '#eab308', marginRight: '0.5rem' }}></div>
+              {connectionStatus.includes('Connected') ? 'Database Online' : 'Checking...'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
@@ -195,100 +366,7 @@ function App() {
         </header>
         
         <div className="content-area">
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon">
-                <Database size={24} />
-              </div>
-              <div className="stat-content">
-                <h3>Target Database</h3>
-                <div className="value" style={{ fontSize: '1rem', wordBreak: 'break-all' }}>gwvqayapzvapowcujqyv</div>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
-                <Activity size={24} />
-              </div>
-              <div className="stat-content">
-                <h3>Status</h3>
-                <div className="value">Online</div>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon" style={{ backgroundColor: '#fef3c7', color: '#d97706' }}>
-                <Search size={24} />
-              </div>
-              <div className="stat-content">
-                <h3>Rows Fetched</h3>
-                <div className="value">{tableData.length}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Data Explorer</h3>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="Enter table name..."
-                    value={tableName}
-                    onChange={(e) => setTableName(e.target.value)}
-                    style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', width: '250px' }}
-                    onKeyDown={(e) => e.key === 'Enter' && fetchTableData()}
-                  />
-                </div>
-                <button className="btn btn-primary" onClick={fetchTableData} style={{ padding: '0.5rem 1rem' }} disabled={loading}>
-                  {loading ? '...' : 'Query'}
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ padding: '1rem' }}>
-              {queryError && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', backgroundColor: '#fef2f2', padding: '0.75rem', borderRadius: '8px', fontSize: '0.875rem' }}>
-                  <AlertCircle size={18} />
-                  {queryError}
-                </div>
-              )}
-
-              {loading ? (
-                <div className="loader"></div>
-              ) : tableData.length > 0 ? (
-                <div className="table-responsive" style={{ marginTop: '1rem' }}>
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        {Object.keys(tableData[0]).map((key) => (
-                          <th key={key}>{key}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tableData.map((row, idx) => (
-                        <tr key={idx}>
-                          {Object.values(row).map((val, i) => (
-                            <td key={i}>
-                              {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                !queryError && (
-                  <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
-                    <Database size={48} style={{ margin: '0 auto 1rem auto', opacity: 0.2 }} />
-                    <p>No data to display. Enter a table name and query to view records.</p>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
+          {renderContent()}
         </div>
       </main>
     </div>
